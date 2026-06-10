@@ -1,0 +1,7 @@
+streamlit>=1.35.0
+anthropic>=0.34.0
+playwright>=1.44.0
+duckduckgo-search>=6.2.0
+python-dotenv>=1.0.0
+Pillow>=10.4.0
+pyperclip>=1.8.0
