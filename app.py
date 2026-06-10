@@ -142,6 +142,8 @@ with right:
                         raw = photo.read()
                         photo.seek(0)
                         media_type = photo.type if photo.type else "image/jpeg"
+                        if media_type not in ("image/jpeg", "image/png", "image/gif", "image/webp"):
+                            media_type = "image/jpeg"
                         photo_data.append(
                             {
                                 "name": photo.name,
