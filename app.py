@@ -1,7 +1,10 @@
 import base64
+import io
 import os
 import subprocess
 import sys
+
+from PIL import Image
 
 import streamlit as st
 from dotenv import load_dotenv
@@ -128,48 +131,55 @@ with right:
         elif not api_key:
             st.error("사이드바에서 Anthropic API Key를 입력해주세요.")
         else:
-            status = st.status("작업 진행 중...", expanded=True)
+            try:
+                status = st.status("작업 진행 중...", expanded=True)
+                with status:
+                    st.write("🔍 식당 정보 검색 중...")
+                    restaurant_info = search_restaurant_info(restaurant_name)
 
-            with status:
-                st.write("🔍 식당 정보 검색 중...")
-                restaurant_info = search_restaurant_info(restaurant_name)
+                    photo_analysis = ""
+                    if photos:
+                        st.write(f"📸 사진 {len(photos)}장 분석 중...")
+                        photo_data = []
+                        for photo in photos:
+                            photo.seek(0)
+                            raw = photo.read()
+                            if not raw:
+                                continue
+                            img = Image.open(io.BytesIO(raw))
+                            if img.mode not in ("RGB", "L"):
+                                img = img.convert("RGB")
+                            max_side = 1568
+                            if max(img.width, img.height) > max_side:
+                                img.thumbnail((max_side, max_side), Image.LANCZOS)
+                            buf = io.BytesIO()
+                            img.save(buf, format="JPEG", quality=85)
+                            photo_data.append(
+                                {
+                                    "name": photo.name,
+                                    "data": base64.b64encode(buf.getvalue()).decode(),
+                                    "media_type": "image/jpeg",
+                                }
+                            )
+                        photo_analysis = analyze_photos(photo_data, api_key)
+                        st.session_state.photo_analysis = photo_analysis
 
-                photo_analysis = ""
-                if photos:
-                    st.write(f"📸 사진 {len(photos)}장 분석 중...")
-                    photo_data = []
-                    for photo in photos:
-                        photo.seek(0)
-                        raw = photo.read()
-                        if not raw:
-                            continue
-                        media_type = photo.type if photo.type else "image/jpeg"
-                        if media_type not in ("image/jpeg", "image/png", "image/gif", "image/webp"):
-                            media_type = "image/jpeg"
-                        photo_data.append(
-                            {
-                                "name": photo.name,
-                                "data": base64.b64encode(raw).decode(),
-                                "media_type": media_type,
-                            }
-                        )
-                    photo_analysis = analyze_photos(photo_data, api_key)
-                    st.session_state.photo_analysis = photo_analysis
-
-                st.write("✍️ SEO 최적화 블로그 글 작성 중...")
-                post = generate_blog_post(
-                    restaurant_name=restaurant_name,
-                    title=title,
-                    keywords=keywords,
-                    tags=tags,
-                    restaurant_info=restaurant_info,
-                    photo_analysis=photo_analysis,
-                    writing_style=writing_style,
-                    draft_notes=draft_notes,
-                    api_key=api_key,
-                )
-                st.session_state.generated_post = post
-                status.update(label="✅ 생성 완료!", state="complete")
+                    st.write("✍️ SEO 최적화 블로그 글 작성 중...")
+                    post = generate_blog_post(
+                        restaurant_name=restaurant_name,
+                        title=title,
+                        keywords=keywords,
+                        tags=tags,
+                        restaurant_info=restaurant_info,
+                        photo_analysis=photo_analysis,
+                        writing_style=writing_style,
+                        draft_notes=draft_notes,
+                        api_key=api_key,
+                    )
+                    st.session_state.generated_post = post
+                    status.update(label="✅ 생성 완료!", state="complete")
+            except Exception as e:
+                st.error(f"오류 발생: {e}")
 
     if st.session_state.photo_analysis:
         with st.expander("📸 사진 분석 결과 보기"):
