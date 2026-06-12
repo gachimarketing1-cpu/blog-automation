@@ -139,8 +139,10 @@ with right:
                     st.write(f"📸 사진 {len(photos)}장 분석 중...")
                     photo_data = []
                     for photo in photos:
-                        raw = photo.read()
                         photo.seek(0)
+                        raw = photo.read()
+                        if not raw:
+                            continue
                         media_type = photo.type if photo.type else "image/jpeg"
                         if media_type not in ("image/jpeg", "image/png", "image/gif", "image/webp"):
                             media_type = "image/jpeg"
