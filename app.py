@@ -43,15 +43,15 @@ with st.sidebar:
     with st.expander("🔑 API 키", expanded=True):
         api_key = st.text_input(
             "Anthropic API Key",
-            value=os.getenv("ANTHROPIC_API_KEY", ""),
+            value=st.secrets.get("ANTHROPIC_API_KEY", os.getenv("ANTHROPIC_API_KEY", "")),
             type="password",
             help="console.anthropic.com 에서 발급",
         )
 
     with st.expander("📝 네이버 계정"):
-        naver_id = st.text_input("네이버 ID", value=os.getenv("NAVER_ID", ""))
+        naver_id = st.text_input("네이버 ID", value=st.secrets.get("NAVER_ID", os.getenv("NAVER_ID", "")))
         naver_pw = st.text_input(
-            "네이버 비밀번호", value=os.getenv("NAVER_PW", ""), type="password"
+            "네이버 비밀번호", value=st.secrets.get("NAVER_PW", os.getenv("NAVER_PW", "")), type="password"
         )
 
     if st.button("✅ 확인", use_container_width=True):
@@ -96,7 +96,7 @@ with left:
     if photos:
         preview_cols = st.columns(min(len(photos), 4))
         for col, photo in zip(preview_cols, photos[:4]):
-            col.image(photo, use_column_width=True)
+            col.image(photo, use_container_width=True)
         if len(photos) > 4:
             st.caption(f"+ {len(photos) - 4}장 더 업로드됨")
 

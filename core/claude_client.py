@@ -1,4 +1,18 @@
+import time
+
 import anthropic
+
+
+def _call_with_retry(fn, max_retries: int = 3):
+    for attempt in range(max_retries):
+        try:
+            return fn()
+        except (anthropic.InternalServerError, anthropic.APIConnectionError, anthropic.APIStatusError) as e:
+            if attempt == max_retries - 1:
+                raise
+            wait = 2 ** attempt  # 1초, 2초, 4초
+            time.sleep(wait)
+    raise RuntimeError("재시도 초과")
 
 
 def analyze_photos(photo_data: list, api_key: str) -> str:
@@ -28,12 +42,11 @@ def analyze_photos(photo_data: list, api_key: str) -> str:
         ),
     })
 
-    response = client.messages.create(
+    return _call_with_retry(lambda: client.messages.create(
         model="claude-sonnet-4-6",
         max_tokens=2000,
         messages=[{"role": "user", "content": content}],
-    )
-    return response.content[0].text
+    ).content[0].text)
 
 
 def generate_blog_post(
@@ -85,10 +98,9 @@ def generate_blog_post(
 ---
 완성된 네이버 블로그 포스팅을 작성해주세요."""
 
-    response = client.messages.create(
+    return _call_with_retry(lambda: client.messages.create(
         model="claude-sonnet-4-6",
         max_tokens=4096,
         system=system_prompt,
         messages=[{"role": "user", "content": user_prompt}],
-    )
-    return response.content[0].text
+    ).content[0].text)
