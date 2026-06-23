@@ -22,7 +22,7 @@ def _install_playwright_browser():
 
 _install_playwright_browser()
 
-from core.claude_client import analyze_photos, generate_blog_post
+from core.claude_client import analyze_photos, generate_blog_post, get_available_models
 from core.naver_uploader import post_to_naver
 from core.search import search_restaurant_info
 
@@ -45,16 +45,36 @@ with st.sidebar:
 
     with st.expander("🔑 API 키", expanded=True):
         api_key = st.text_input(
-            "Anthropic API Key",
-            value=st.secrets.get("ANTHROPIC_API_KEY", os.getenv("ANTHROPIC_API_KEY", "")),
+            "Gemini API Key",
+            value=os.getenv("GEMINI_API_KEY", ""),
             type="password",
-            help="console.anthropic.com 에서 발급",
+            help="aistudio.google.com 에서 무료 발급",
+        )
+
+    with st.expander("🤖 모델 선택", expanded=True):
+        model_options = []
+        if api_key:
+            try:
+                model_options = get_available_models(api_key)
+            except Exception:
+                pass
+        if not model_options:
+            model_options = [
+                "gemini-2.0-flash-lite",
+                "gemini-2.0-flash",
+                "gemini-1.5-flash",
+                "gemini-1.5-pro",
+            ]
+        selected_model = st.selectbox(
+            "사용할 모델",
+            options=model_options,
+            help="API 키 입력 후 사용 가능한 모델이 자동으로 로드됩니다",
         )
 
     with st.expander("📝 네이버 계정"):
-        naver_id = st.text_input("네이버 ID", value=st.secrets.get("NAVER_ID", os.getenv("NAVER_ID", "")))
+        naver_id = st.text_input("네이버 ID", value=os.getenv("NAVER_ID", ""))
         naver_pw = st.text_input(
-            "네이버 비밀번호", value=st.secrets.get("NAVER_PW", os.getenv("NAVER_PW", "")), type="password"
+            "네이버 비밀번호", value=os.getenv("NAVER_PW", ""), type="password"
         )
 
     if st.button("✅ 확인", use_container_width=True):
@@ -129,7 +149,7 @@ with right:
         if not restaurant_name:
             st.error("식당명을 입력해주세요.")
         elif not api_key:
-            st.error("사이드바에서 Anthropic API Key를 입력해주세요.")
+            st.error("사이드바에서 Gemini API Key를 입력해주세요.")
         else:
             try:
                 status = st.status("작업 진행 중...", expanded=True)
@@ -161,7 +181,7 @@ with right:
                                     "media_type": "image/jpeg",
                                 }
                             )
-                        photo_analysis = analyze_photos(photo_data, api_key)
+                        photo_analysis = analyze_photos(photo_data, api_key, selected_model)
                         st.session_state.photo_analysis = photo_analysis
 
                     st.write("✍️ SEO 최적화 블로그 글 작성 중...")
@@ -175,8 +195,10 @@ with right:
                         writing_style=writing_style,
                         draft_notes=draft_notes,
                         api_key=api_key,
+                        model=selected_model,
                     )
                     st.session_state.generated_post = post
+                    st.session_state.post_editor = post
                     status.update(label="✅ 생성 완료!", state="complete")
             except Exception as e:
                 st.error(f"오류 발생: {e}")

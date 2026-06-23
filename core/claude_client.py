@@ -1,52 +1,53 @@
+import base64
 import time
 
-import anthropic
+from google import genai
+from google.genai import types
+
+WORKING_MODELS = [
+    "gemini-2.5-flash-lite",
+    "gemini-2.5-flash",
+    "gemini-flash-lite-latest",
+]
 
 
-def _call_with_retry(fn, max_retries: int = 3):
-    for attempt in range(max_retries):
+def get_available_models(api_key: str) -> list[str]:
+    return WORKING_MODELS
+
+
+def _generate_with_fallback(client, models: list[str], **kwargs) -> str:
+    last_err = None
+    for model in models:
         try:
-            return fn()
-        except (anthropic.InternalServerError, anthropic.APIConnectionError, anthropic.APIStatusError) as e:
-            if attempt == max_retries - 1:
-                raise
-            wait = 2 ** attempt  # 1초, 2초, 4초
-            time.sleep(wait)
-    raise RuntimeError("재시도 초과")
+            return client.models.generate_content(model=model, **kwargs).text
+        except Exception as e:
+            last_err = e
+            time.sleep(1)
+    raise last_err
 
 
-def analyze_photos(photo_data: list, api_key: str) -> str:
-    client = anthropic.Anthropic(api_key=api_key)
+def analyze_photos(photo_data: list, api_key: str, model: str) -> str:
+    client = genai.Client(api_key=api_key)
 
-    content = []
+    parts = []
     for i, photo in enumerate(photo_data[:10], 1):
-        content.append({
-            "type": "image",
-            "source": {
-                "type": "base64",
-                "media_type": photo["media_type"],
-                "data": photo["data"],
-            },
-        })
-        content.append({"type": "text", "text": f"[사진 {i}번]"})
+        parts.append(types.Part.from_bytes(
+            data=base64.b64decode(photo["data"]),
+            mime_type=photo["media_type"],
+        ))
+        parts.append(f"[사진 {i}번]")
 
-    content.append({
-        "type": "text",
-        "text": (
-            "위 사진들을 번호 순서대로 분석해주세요. 각 사진에 대해:\n"
-            "- 어떤 메뉴나 음식인지\n"
-            "- 외관, 색감, 플레이팅\n"
-            "- 분위기나 공간 (해당되는 경우)\n"
-            "- 블로그 글에 활용할 만한 특이사항\n\n"
-            "블로그 글 작성에 바로 활용할 수 있도록 구체적이고 생생하게 묘사해주세요."
-        ),
-    })
+    parts.append(
+        "위 사진들을 번호 순서대로 분석해주세요. 각 사진에 대해:\n"
+        "- 어떤 메뉴나 음식인지\n"
+        "- 외관, 색감, 플레이팅\n"
+        "- 분위기나 공간 (해당되는 경우)\n"
+        "- 블로그 글에 활용할 만한 특이사항\n\n"
+        "블로그 글 작성에 바로 활용할 수 있도록 구체적이고 생생하게 묘사해주세요."
+    )
 
-    return _call_with_retry(lambda: client.messages.create(
-        model="claude-sonnet-4-6",
-        max_tokens=2000,
-        messages=[{"role": "user", "content": content}],
-    ).content[0].text)
+    models = [model] + [m for m in WORKING_MODELS if m != model]
+    return _generate_with_fallback(client, models, contents=parts)
 
 
 def generate_blog_post(
@@ -59,8 +60,9 @@ def generate_blog_post(
     writing_style: str,
     draft_notes: str,
     api_key: str,
+    model: str,
 ) -> str:
-    client = anthropic.Anthropic(api_key=api_key)
+    client = genai.Client(api_key=api_key)
 
     system_prompt = """당신은 대한민국 최고의 맛집 블로그 전문 작가입니다.
 2026년 네이버 D.I.A+(다이아플러스) 알고리즘과 C-Rank에 최적화된 블로그 글을 작성합니다.
@@ -98,9 +100,10 @@ def generate_blog_post(
 ---
 완성된 네이버 블로그 포스팅을 작성해주세요."""
 
-    return _call_with_retry(lambda: client.messages.create(
-        model="claude-sonnet-4-6",
-        max_tokens=4096,
-        system=system_prompt,
-        messages=[{"role": "user", "content": user_prompt}],
-    ).content[0].text)
+    models = [model] + [m for m in WORKING_MODELS if m != model]
+    return _generate_with_fallback(
+        client,
+        models,
+        config=types.GenerateContentConfig(system_instruction=system_prompt),
+        contents=user_prompt,
+    )
